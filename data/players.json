@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "name": "Ivan",
+    "attack": 9,
+    "defense": 6,
+    "goalkeeping": 1,
+    "overall": 8
+  },
+  {
+    "id": 2,
+    "name": "Peter",
+    "attack": 7,
+    "defense": 8,
+    "goalkeeping": 1,
+    "overall": 7.5
+  },
+  {
+    "id": 3,
+    "name": "Georgi",
+    "attack": 5,
+    "defense": 9,
+    "goalkeeping": 1,
+    "overall": 7
+  },
+  {
+    "id": 4,
+    "name": "Dimitar",
+    "attack": 8,
+    "defense": 5,
+    "goalkeeping": 8,
+    "overall": 7.5
+  },
+  {
+    "id": 5,
+    "name": "Nikolay",
+    "attack": 6,
+    "defense": 7,
+    "goalkeeping": 1,
+    "overall": 6.5
+  },
+  {
+    "id": 6,
+    "name": "Stefan",
+    "attack": 9,
+    "defense": 7,
+    "goalkeeping": 1,
+    "overall": 8.2
+  },
+  {
+    "id": 7,
+    "name": "Martin",
+    "attack": 8,
+    "defense": 6,
+    "goalkeeping": 1,
+    "overall": 7.6
+  },
+  {
+    "id": 8,
+    "name": "Alex",
+    "attack": 6,
+    "defense": 9,
+    "goalkeeping": 1,
+    "overall": 7.4
+  },
+  {
+    "id": 9,
+    "name": "Viktor",
+    "attack": 10,
+    "defense": 5,
+    "goalkeeping": 1,
+    "overall": 8
+  },
+  {
+    "id": 10,
+    "name": "Kaloyan",
+    "attack": 5,
+    "defense": 8,
+    "goalkeeping": 1,
+    "overall": 6.8
+  },
+  {
+    "id": 11,
+    "name": "Teodor",
+    "attack": 7,
+    "defense": 7,
+    "goalkeeping": 1,
+    "overall": 7.5
+  },
+  {
+    "id": 12,
+    "name": "Boris",
+    "attack": 4,
+    "defense": 9,
+    "goalkeeping": 7,
+    "overall": 7
+  },
+  {
+    "id": 13,
+    "name": "Anton",
+    "attack": 8,
+    "defense": 7,
+    "goalkeeping": 1,
+    "overall": 7.8
+  },
+  {
+    "id": 14,
+    "name": "Daniel",
+    "attack": 6,
+    "defense": 6,
+    "goalkeeping": 1,
+    "overall": 6.6
+  },
+  {
+    "id": 15,
+    "name": "Mihail",
+    "attack": 7,
+    "defense": 5,
+    "goalkeeping": 1,
+    "overall": 6.9
+  },
+  {
+    "id": 16,
+    "name": "Radoslav",
+    "attack": 5,
+    "defense": 8,
+    "goalkeeping": 8,
+    "overall": 7.2
+  },
+  {
+    "id": 17,
+    "name": "Hristo",
+    "attack": 9,
+    "defense": 4,
+    "goalkeeping": 1,
+    "overall": 7.3
+  },
+  {
+    "id": 18,
+    "name": "Vasil",
+    "attack": 6,
+    "defense": 8,
+    "goalkeeping": 1,
+    "overall": 7.3
+  },
+  {
+    "id": 19,
+    "name": "Kristian",
+    "attack": 8,
+    "defense": 8,
+    "goalkeeping": 1,
+    "overall": 8
+  },
+  {
+    "id": 20,
+    "name": "Todor",
+    "attack": 3,
+    "defense": 9,
+    "goalkeeping": 9,
+    "overall": 7
+  }
+]

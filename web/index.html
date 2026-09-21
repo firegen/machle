@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Football Team Balancer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <h1><span class="ball" aria-hidden="true">⚽</span> Football Team Balancer</h1>
+    <p class="tagline">Rate your squad, pick the players, get two evenly matched teams.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ============ match setup ============ -->
+  <section class="panel" aria-labelledby="setup-title">
+    <h2 id="setup-title">Match setup</h2>
+
+    <div class="setup">
+      <div class="field">
+        <label for="teamSize">Team size</label>
+        <select id="teamSize" name="teamSize"></select>
+        <p class="help" id="neededInfo"></p>
+      </div>
+
+      <fieldset class="field weights">
+        <legend>Attribute weights</legend>
+        <div class="weights-grid">
+          <label>Attack <input type="number" id="wAttack" min="0" max="100" step="1" value="30"></label>
+          <label>Defense <input type="number" id="wDefense" min="0" max="100" step="1" value="30"></label>
+          <label>Goalkeeping <input type="number" id="wGoalkeeping" min="0" max="100" step="1" value="10"></label>
+          <label>Overall <input type="number" id="wOverall" min="0" max="100" step="1" value="30"></label>
+        </div>
+        <p class="help">Normalised to 100%: <span id="weightsNormalised">30% / 30% / 10% / 30%</span></p>
+        <div class="weight-presets">
+          <button type="button" class="ghost" data-preset="30,30,10,30">Balanced</button>
+          <button type="button" class="ghost" data-preset="40,40,0,20">Outfield only</button>
+          <button type="button" class="ghost" data-preset="10,10,60,20">Goalkeeper heavy</button>
+          <button type="button" class="ghost" data-preset="25,25,25,25">Equal</button>
+        </div>
+      </fieldset>
+
+      <div class="field actions">
+        <span class="actions-label">Selection</span>
+        <button type="button" id="selectAll" class="ghost">Select all</button>
+        <button type="button" id="clearSelection" class="ghost">Clear selection</button>
+        <button type="button" id="generate" class="primary">Generate teams</button>
+      </div>
+    </div>
+
+    <p class="status" id="selectionInfo" role="status"></p>
+    <p class="status error" id="message" role="alert" hidden></p>
+  </section>
+
+  <!-- ============ players ============ -->
+  <section class="panel" aria-labelledby="players-title">
+    <div class="panel-head">
+      <h2 id="players-title">Players</h2>
+      <span class="pill" id="playerCount"></span>
+    </div>
+    <div class="scroll">
+      <table class="players">
+        <thead>
+          <tr>
+            <th class="col-check" scope="col"><span class="sr-only">Select</span></th>
+            <th scope="col">Name</th>
+            <th scope="col" title="Attack">Att</th>
+            <th scope="col" title="Defense">Def</th>
+            <th scope="col" title="Goalkeeping">Gk</th>
+            <th scope="col" title="Overall">Ovr</th>
+            <th class="col-actions" scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="playersBody"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="playersEmpty" hidden>No players yet — add your squad below.</p>
+  </section>
+
+  <!-- ============ player management ============ -->
+  <section class="panel" aria-labelledby="form-title">
+    <div class="panel-head">
+      <h2 id="form-title">Add player</h2>
+      <span class="pill">ratings 1&ndash;10, decimals allowed</span>
+    </div>
+    <form id="playerForm" novalidate>
+      <div class="form-grid">
+        <label class="grow">Name
+          <input type="text" id="fName" autocomplete="off" placeholder="e.g. Ivan" required>
+        </label>
+        <label>Attack <input type="number" id="fAttack" min="1" max="10" step="0.1" placeholder="9"></label>
+        <label>Defense <input type="number" id="fDefense" min="1" max="10" step="0.1" placeholder="6"></label>
+        <label>Goalkeeping <input type="number" id="fGoalkeeping" min="1" max="10" step="0.1" placeholder="1"></label>
+        <label>Overall <input type="number" id="fOverall" min="1" max="10" step="0.1" placeholder="8"></label>
+      </div>
+      <p class="status error" id="formError" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="submit" class="primary" id="formSubmit">Add player</button>
+        <button type="button" class="ghost" id="formCancel" hidden>Cancel edit</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ============ results ============ -->
+  <section class="panel results" id="results" aria-labelledby="results-title" hidden>
+    <div class="panel-head results-head">
+      <h2 id="results-title">Teams</h2>
+      <div class="scoreboard">
+        <div class="balance">
+          <span class="balance-label">Balance</span>
+          <strong id="balance">—</strong>
+          <span class="meter" aria-hidden="true"><i id="balanceMeter"></i></span>
+        </div>
+        <span class="pill" id="difference"></span>
+        <span class="pill" id="objective"></span>
+        <span class="pill" id="method"></span>
+      </div>
+      <button type="button" class="ghost" id="resetTeams" hidden>Reset to generated</button>
+    </div>
+    <p class="tweak-note" id="tweakNote" hidden></p>
+    <div class="teams" id="teams"></div>
+    <table class="compare">
+      <thead>
+        <tr><th scope="col">Category</th><th scope="col">&#128309; Team A</th><th scope="col">&#128994; Team B</th><th scope="col">Diff</th></tr>
+      </thead>
+      <tbody id="compareBody"></tbody>
+    </table>
+  </section>
+</main>
+
+<footer class="foot wrap">
+  <span>🧤 marks a goalkeeper-capable player (Goalkeeping &ge; <span id="gkThreshold">5</span>).</span>
+  <span>Teams are solved exactly with an exhaustive combination search.</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
