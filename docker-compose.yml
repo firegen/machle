@@ -1,0 +1,32 @@
+name: football-balancer
+
+services:
+  balancer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: football-balancer:latest
+    container_name: football-balancer
+    restart: unless-stopped
+    ports:
+      # Override without editing this file: HOST_PORT=8085 docker compose up -d
+      - "${HOST_PORT:-8080}:8080"
+    volumes:
+      # Named volume, so roster edits survive rebuilds and image upgrades.
+      - players:/data
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    # Flags are the container defaults in the Dockerfile; uncomment to change:
+    # command: ["-addr", ":8080", "-data", "/data/players.json"]
+
+volumes:
+  players:
+    name: football-balancer-data

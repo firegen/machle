@@ -1,0 +1,19 @@
+# Nothing below is needed to build or test the Go binary.
+.git
+.gitignore
+.qwen
+.idea
+.vscode
+
+# Local run artefacts. The container reads its own copy under /data from the
+# named volume instead.
+data/*.tmp
+server
+football-balancer
+*.log
+
+# Docs and packaging files don't invalidate the build cache.
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md

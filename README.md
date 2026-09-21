@@ -24,6 +24,8 @@ go run ./cmd/server
 
 Then open **http://localhost:8080**
 
+Prefer a container? Jump to [Running with Docker](#running-with-docker).
+
 Flags:
 
 | Flag      | Default               | Purpose                              |
@@ -41,6 +43,47 @@ example roster on the next start.
 
 Requires Go 1.22 or newer (the router uses method-aware patterns); developed on
 Go 1.26.
+
+---
+
+## Running with Docker
+
+```bash
+docker compose up -d --build      # then open http://localhost:8080
+```
+
+| Task                 | Command |
+|----------------------|---------|
+| Logs / stop / restart | `docker compose logs -f` · `down` · `restart` |
+| Different host port   | `HOST_PORT=8085 docker compose up -d` |
+| Rebuild after edits   | `docker compose up -d --build` |
+| Run the suite in a container | `docker build --target test .` |
+| Plain Docker          | `docker build -t football-balancer . && docker run --rm -p 8080:8080 -v balancer-data:/data football-balancer` |
+
+The image is multi-stage: Go compiles a static binary (`CGO_ENABLED=0`), the UI
+is baked into it by `web/embed.go`, and only that binary plus an Alpine base
+lands in the runtime layer — no Go toolchain, no separate web server. The
+container runs as a non-root user, ships a `/api/health` healthcheck, and the
+Go binary is PID 1, so `docker stop` triggers the same graceful shutdown as
+Ctrl-C.
+
+**Where the roster lives:** the container reads `-data /data/players.json`, a
+named volume (`football-balancer-data`) that survives rebuilds and image
+upgrades. It is seeded with the 20 example players on first start. The runtime
+image holds nothing but the binary and that empty `/data`, so the repo's
+`data/players.json` — used by local `go run` and by the tests — is never baked
+in or shadowed.
+
+```bash
+docker volume inspect football-balancer-data            # where it is on the host
+docker run --rm -v football-balancer-data:/d alpine cat /d/players.json   # read it
+docker compose down                                     # keeps the volume
+docker compose down -v                                  # deletes the roster — careful
+```
+
+Prefer a bind mount if you want to edit `./data/players.json` directly: replace
+`players:/data` with `./data:/data` in `docker-compose.yml`, and make sure the
+directory is writable by uid 1000 (`sudo chown -R 1000:1000 data`).
 
 ---
 
@@ -97,6 +140,9 @@ football-balancer/
 │   └── embed_test.go           # ids used by app.js exist in index.html
 ├── data/players.json
 ├── go.mod
+├── Dockerfile                    # multi-stage: build → test → 22 MB runtime
+├── docker-compose.yml            # port 8080, named volume for the roster
+├── .dockerignore
 └── README.md
 ```
 
