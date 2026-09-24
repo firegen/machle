@@ -16,22 +16,28 @@ import (
 )
 
 type harness struct {
-	ts   *httptest.Server
-	path string
-	dir  string
+	ts        *httptest.Server
+	path      string // roster file
+	matchPath string // match history file
+	dir       string
 }
 
 func newTestServer(t *testing.T) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "players.json")
+	matchPath := filepath.Join(dir, "matches.json")
 	store, err := storage.NewJSONStore(path)
 	if err != nil {
 		t.Fatalf("NewJSONStore: %v", err)
 	}
-	ts := httptest.NewServer(New(store, nil))
+	matchStore, err := storage.NewMatchJSONStore(matchPath)
+	if err != nil {
+		t.Fatalf("NewMatchJSONStore: %v", err)
+	}
+	ts := httptest.NewServer(New(store, matchStore, nil))
 	t.Cleanup(ts.Close)
-	return &harness{ts: ts, path: path, dir: dir}
+	return &harness{ts: ts, path: path, matchPath: matchPath, dir: dir}
 }
 
 func (h *harness) url(path string) string { return h.ts.URL + path }
@@ -142,8 +148,8 @@ func TestPlayerCRUDRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list data dir: %v", err)
 	}
-	if len(entries) != 1 || entries[0].Name() != "players.json" {
-		t.Errorf("atomic write left debris behind: %v", names(entries))
+	if got := strings.Join(names(entries), ","); got != "matches.json,players.json" {
+		t.Errorf("data dir holds [%s], want only the two data files with no write debris", got)
 	}
 
 	created.Name = "Renamed"
@@ -453,7 +459,11 @@ func TestServesFrontend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewJSONStore: %v", err)
 	}
-	ts := httptest.NewServer(New(store, http.Dir(dir)))
+	matchStore, err := storage.NewMatchJSONStore(filepath.Join(dir, "matches.json"))
+	if err != nil {
+		t.Fatalf("NewMatchJSONStore: %v", err)
+	}
+	ts := httptest.NewServer(New(store, matchStore, http.Dir(dir)))
 	t.Cleanup(ts.Close)
 
 	for path, want := range map[string]string{

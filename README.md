@@ -2,6 +2,8 @@
 
 Maintain a roster of footballers with individual ratings, select a group of
 players, and split them into two teams that are as evenly matched as possible.
+Every draw is saved as a **match** you can score and rate afterwards, so the app
+also keeps a per-player history.
 
 The balancing is **exact** for every supported team size: all distinct
 partitions are evaluated and the one with the lowest imbalance is returned.
@@ -32,6 +34,7 @@ Flags:
 |-----------|-----------------------|--------------------------------------|
 | `-addr`   | `:8080`               | listen address                        |
 | `-data`   | `data/players.json`   | roster file (created on first run)    |
+| `-matches`| `data/matches.json`   | saved fixtures + ratings (created on first run) |
 
 ```bash
 go run ./cmd/server -addr 127.0.0.1:9000 -data /tmp/roster.json
@@ -67,12 +70,13 @@ container runs as a non-root user, ships a `/api/health` healthcheck, and the
 Go binary is PID 1, so `docker stop` triggers the same graceful shutdown as
 Ctrl-C.
 
-**Where the roster lives:** the container reads `-data /data/players.json`, a
-named volume (`football-balancer-data`) that survives rebuilds and image
-upgrades. It is seeded with the 20 example players on first start. The runtime
-image holds nothing but the binary and that empty `/data`, so the repo's
-`data/players.json` — used by local `go run` and by the tests — is never baked
-in or shadowed.
+**Where the data lives:** the container reads `-data /data/players.json` and
+`-matches /data/matches.json`, both on the named volume
+(`football-balancer-data`) that survives rebuilds and image upgrades. The roster
+is seeded with the 20 example players on first start; the history starts empty.
+The runtime image holds nothing but the binary and that empty `/data`, so the
+repo's own `data/*.json` — used by local `go run` and by the tests — is never
+baked in or shadowed.
 
 ```bash
 docker volume inspect football-balancer-data            # where it is on the host
@@ -89,27 +93,51 @@ directory is writable by uid 1000 (`sudo chown -R 1000:1000 data`).
 
 ## Using the UI
 
-1. **Players** — every player is a row with Attack / Defense / Goalkeeping /
-   Overall and a checkbox. 🧤 marks a player whose Goalkeeping is at or above
-   the goalkeeper threshold (5), meaning they are goalkeeper-*capable*.
-2. **Select players** — `Select all`, `Clear selection`, or tick rows by hand.
-   The status line shows `N selected · M needed for 6 vs 6`; `Generate teams`
-   activates only when the count is exactly `teamSize × 2`, and the reason is
-   spelled out when it is not.
-3. **Team size** — 5v5, 6v6, 7v7, 8v8, 9v9 or 10v10.
-4. **Weights** — Attack / Defense / Goalkeeping / Overall on any scale. The UI
-   shows the values normalised to 100 % live as you type, and the server
-   normalises them again independently. Four presets cover common setups.
-5. **Generate teams** — Team A 🔵 and Team B 🟠 appear with per-category
+The interface is **Bulgarian**; the API and its JSON error strings stay
+English. In practice that is invisible during normal use — the browser validates
+the selection count and every rating before calling the server — so an English
+message only appears in edge cases such as saving a player another tab has just
+deleted. Player names and ratings are data, not UI text, and are never
+translated or rewritten.
+
+1. **Играчи** (Players) — each row shows Име / Ат / За / ГК / Об with a checkbox.
+   🧤 marks a player whose Goalkeeping is at or above the goalkeeper threshold
+   (5), meaning they are goalkeeper-*capable*.
+2. **Select** — `Избери всички` (all), `Изчисти избора` (clear), or tick rows by
+   hand. The status line reads `12 избрани · нужни са 12 за 6 срещу 6`;
+   `Създай отборите` activates only when the count is exactly `teamSize × 2`,
+   and the reason is spelled out when it is not.
+3. **Играчи в отбор** (players per side) — 5 срещу 5 up to 10 срещу 10.
+4. **Тежест на показателите** (weights) — Атака / Защита / Голкипер / Общо on any
+   scale. The line under the inputs shows them normalised to 100 % live as you
+   type, and the server normalises them again independently. Four presets:
+   `Балансирани`, `Само полеви`, `Акцент вратари`, `Равни`.
+5. **Създай отборите** — Отбор А 🔵 and Отбор Б 🟠 appear with per-category
    totals, weighted score, goalkeeper counts, the balance percentage, and a
-   category-by-category comparison table.
-6. **Fine-tune by hand** — `Move to Team B` / `Move to Team A` on any player.
-   Totals, weighted score, balance and objective recalculate immediately in the
-   browser, and a note records what no longer matches the solver's answer (a
-   hand adjustment, or weights changed after generating). `Reset to generated`
+   category-by-category comparison table (`Показател · Отбор А · Отбор Б ·
+   Разлика`).
+6. **Fine-tune by hand** — `Премести в отбор Б` / `Премести в отбор А` on any
+   player. Totals, weighted score, balance and objective recalculate immediately,
+   and a note records what no longer matches the solver's answer (a hand
+   adjustment, or weights changed after generating). `Възстанови генерираното`
    brings back the optimiser's split.
-7. **Manage the roster** — add, edit and delete players; ratings are validated
-   client-side and again on the server (1 ≤ rating ≤ 10, decimals allowed).
+7. **Roster** — `Нов играч` / `Редактирай` / `Изтрий` (add, edit, delete).
+   Ratings are validated client-side and again on the server (1 ≤ rating ≤ 10,
+   decimals allowed).
+8. **Мачове** — generating a draw writes a pending fixture automatically. Open
+   `Резултат и оценки` on a card to set the date, both scores, a 1–10 mark per
+   player and ⭐ the player of the match. Each roster row gains a `Мачове` cell
+   (`appearances · awards · average`) that opens that player's history.
+
+| On screen | Meaning | API field |
+|-----------|---------|-----------|
+| Атака / Защита / Голкипер / Общо | the four attributes | `attack` `defense` `goalkeeping` `overall` |
+| Претеглен резултат | weighted team score | `weightedScore` |
+| Баланс | balance percentage | `balance` |
+| Разлика | weighted-score difference | `difference` |
+| Целева стойност | objective being minimised | `objective` |
+| пълен преглед / локално търсене | exhaustive / local search | `method` |
+| варианта | partitions evaluated | `explored` |
 
 ---
 
@@ -121,16 +149,20 @@ football-balancer/
 │   └── server/main.go          # flags, HTTP server, graceful shutdown
 ├── internal/
 │   ├── model/player.go         # Player, Weights, Team, BalanceResult, validation
+│   ├── model/match.go          # Match, statuses, ratings, player history
 │   ├── balancer/
 │   │   ├── balancer.go         # objective function + exact/heuristic search
 │   │   └── balancer_test.go    # 20 tests incl. brute-force cross-check
 │   ├── storage/
-│   │   ├── storage.go          # Repository interface (swap for Postgres here)
-│   │   ├── json.go             # atomic JSON file store
+│   │   ├── storage.go          # Repository + MatchRepository interfaces
+│   │   ├── file.go             # shared atomic JSON read/write
+│   │   ├── json.go             # roster store
 │   │   ├── seed.go             # 20 example players
+│   │   ├── matches.go          # match history store
 │   │   └── json_test.go        # persistence, corruption, concurrency
 │   └── api/
 │       ├── handlers.go         # routes + encoding only, no business logic
+│       ├── matches.go          # match endpoints, line-up resolution
 │       └── handlers_test.go    # HTTP contract incl. 400/404/405 behaviour
 ├── web/
 │   ├── index.html
@@ -139,6 +171,7 @@ football-balancer/
 │   ├── embed.go                # go:embed so the UI ships inside the binary
 │   └── embed_test.go           # ids used by app.js exist in index.html
 ├── data/players.json
+├── data/matches.json
 ├── go.mod
 ├── Dockerfile                    # multi-stage: build → test → 22 MB runtime
 ├── docker-compose.yml            # port 8080, named volume for the roster
@@ -166,6 +199,12 @@ keeps `main.go` under `cmd/`), and the small `storage/storage.go` /
 | `PUT /api/players/{id}`     | edit a player                            |
 | `DELETE /api/players/{id}`  | remove a player                          |
 | `POST /api/balance`         | split the selected players into two teams |
+| `GET /api/matches`          | saved fixtures, newest first              |
+| `POST /api/matches`         | record a drawn line-up                    |
+| `GET /api/matches/{id}`     | one fixture                               |
+| `PUT /api/matches/{id}`     | set the score, ratings, award, date       |
+| `DELETE /api/matches/{id}`  | remove a fixture                          |
+| `GET /api/players/{id}/history` | one player's appearances and aggregates |
 | `GET /api/config`           | defaults, limits, objective coefficients  |
 | `GET /api/health`           | liveness                                 |
 
@@ -318,9 +357,95 @@ balance 99.8%   difference 0.08   objective 0.45   462 splits evaluated
 
 ---
 
+## Matches, results and player history
+
+Generating teams is not the end of a session, so every draw is also written as a
+**match**. It records who was picked, how even the two sides were, the final
+score, a 1–10 mark per player and one ⭐ player of the match.
+
+### Lifecycle
+
+| Status (API / UI)   | Meaning                                       | Requires |
+|---------------------|-----------------------------------------------|----------|
+| `upcoming` / `предстоящ` | drawn, nobody has played it yet           | nothing |
+| `played` / `изигран`  | the result is in                              | both scores |
+| `rated` / `оценен`    | the result and a mark for **every** player    | both scores + all ratings |
+
+The status is never trusted from the client: `Match.Validate` rejects a
+`rated` match that is missing ratings, and a `played` match without a score, so
+the stored history cannot drift into a state the aggregates would misread. When
+a request omits the status, the server derives the most advanced one the content
+supports. Half a score (`team A: 2`, `team B: null`) is rejected outright — the
+choice is no result or a complete one.
+
+### What is frozen, and what may still change
+
+A match stores copies of its players (`MatchPlayer{ID, Name}`) plus the team
+totals computed at draw time. Renaming or deleting a player afterwards never
+rewrites a past fixture, and deleting a player never deletes their matches.
+
+The one part that stays editable while `upcoming` is the **line-up**: re-drawing
+the pending fixture follows hand adjustments, so the stored match is the one you
+actually play. As soon as a score exists the composition freezes; `clearResult`
+reopens it deliberately.
+
+A re-draw keeps the match's own weight profile and its team size — moving people
+between the sides is a new draw, silently turning a 5v5 into a 3v3 is not.
+
+### Recording rule (why you do not get a duplicate per click)
+
+`POST /api/matches` reuses an unfinished match when it already holds exactly the
+same two teams, in either order (`SameLineup` — nobody has home advantage, so
+A/B swapped is the same fixture). Pressing `Създай отборите` twice on the same
+selection therefore keeps one pending match; a genuinely different split gets a
+new row; and once a fixture has a result, the next draw is a new match.
+
+The browser pushes manual adjustments into the pending match 400 ms after the
+last move, so dragging five players across is one write instead of five. A
+one-sided move leaves 5 v 7, which is not a fixture at all — rather than quietly
+keeping the older even draw on file, the results panel says exactly that.
+
+### End-of-match ratings
+
+`rating` is a *result*, not an input: it is stored per match and aggregated into
+`GET /api/players/{id}/history`, and it never touches `attack` / `defense` /
+`goalkeeping` / `overall`. The teams you balance next are built from the same
+ratings you chose, not from last week's form nobody agreed to. (An explicit
+"apply this rating to the player" action is easy to add later; auto-drifting the
+roster is not, because it would make balancing depend on match history without
+asking.)
+
+Aggregates count **played** matches only — pending draws are excluded, so
+"3 мача · 7.4" means three games actually played. `averageRating` averages the
+marks that exist, `lastRatings` is the five most recent, and `wins/draws/losses`
+are read from each side's point of view. Stray ratings for players who are no
+longer in the line-up are ignored rather than dividing by them.
+
+### One session end to end
+
+```bash
+# record a drawn 6 v 6 from the current roster
+curl -s localhost:8080/api/players | jq '{teamSize: 6, weights: {attack:30,defense:30,goalkeeping:10,overall:30},
+  teamA: [1,7,8,9,10,12], teamB: [2,3,4,5,6,11]}'   | curl -s -X POST localhost:8080/api/matches -H 'Content-Type: application/json' --data @- | jq '{id, status, balance}'
+#  → { "id": 1, "status": "upcoming", "balance": 99.8 }
+
+# the result, everyone's mark and the ⭐
+curl -s -X PUT localhost:8080/api/matches/1 -H 'Content-Type: application/json' -d '{
+  "goalsA": 4, "goalsB": 2, "manOfTheMatch": 7,
+  "ratings": [{"playerId":1,"rating":7.5},{"playerId":7,"rating":9},{"playerId":8,"rating":6}] }' | jq .status
+#  → "played"   (three of twelve rated — "rated" would be rejected)
+
+curl -s localhost:8080/api/players/7/history | jq '{matches: .summary.matches, average: .summary.averageRating,
+  record: [.summary.wins, .summary.draws, .summary.losses], awards: .summary.manOfTheMatch}'
+#  → { "matches": 1, "average": 9, "record": [1, 0, 0], "awards": 1 }
+```
+
+---
+
 ## Persistence
 
-`internal/storage.Repository` is the only thing the rest of the program sees:
+`internal/storage` exposes one interface per entity, and it is the only thing
+the rest of the program sees:
 
 ```go
 type Repository interface {
@@ -332,13 +457,21 @@ type Repository interface {
 }
 ```
 
-`JSONStore` implements it with an in-memory slice, a mutex, and atomic writes
-(temp file → fsync → rename), so a crash can never leave a half-written roster.
+`JSONStore` (roster) and `MatchJSONStore` (history) implement them with an
+in-memory slice, a mutex, and atomic writes (temp file → fsync → rename), so a
+crash can never leave a half-written data file behind. Separate interfaces and
+separate files on purpose: `data/players.json` is editable current state, while
+`data/matches.json` is the record of what happened, which roster edits must
+never disturb.
+
 Player IDs are a monotonic high-water mark: deleting the last player does not
 free its ID for reuse, which keeps a stale browser tab from pointing at the
-wrong person. A `POSTGRESStore` (or CSV, or an in-memory fake for tests) only
-has to satisfy the same five methods, and `cmd/server` is where you would pick
-which one to construct.
+wrong person. Match IDs work the same way.
+
+A PostgreSQL backend (or CSV, or an in-memory fake for tests) only has to
+satisfy those five methods per entity, and `cmd/server` is where you pick which
+implementation to construct. A real database would model matches and ratings as
+related tables behind the same interface.
 
 ## Tests
 
@@ -356,6 +489,12 @@ weights, strong goalkeeper imbalance, identical players, decimal ratings, the
 `teamA ∩ teamB = ∅` / `teamA ∪ teamB = pool` / `len = teamSize` invariants,
 that no mirror split is evaluated twice, determinism, and a cross-check of the
 chosen split against an independently written brute-force enumeration.
+
+The match layer is covered the same way: status transitions and the rules that
+keep `status` honest (a `rated` match must actually hold a mark for every
+player), frozen line-ups that survive roster edits, re-draw guards, aggregate
+maths (appearances, averages, form window, wins/draws/losses), plus an HTTP
+lifecycle test that reopens the data files from disk.
 
 ## Example roster
 
@@ -397,7 +536,7 @@ Deliberately not implemented, but already accommodated:
 | Player chemistry           | needs pair terms, so `evaluate()` (it already walks the whole pool) |
 | 3+ teams, tournament mode  | masks become team-index arrays; raise `DefaultMaxExhaustiveCombinations` and lean on `searchLocalSearch` |
 | Goalkeeper-specific rules  | `model.GoalkeeperThreshold` + the two keeper coefficients |
-| Saved line-ups, match history | another `Repository` for a different entity |
+| Saved line-ups / presets      | a third `Repository`, same pattern as `MatchJSONStore` |
 
 Constraints to remember when extending: partitions travel as `uint64` bitmasks
 (fine up to 63 players, so `MaxTeamSize ≤ 31`), and every attribute the balancer
