@@ -1,11 +1,7 @@
 package storage
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -14,16 +10,13 @@ import (
 )
 
 // JSONStore keeps the roster in a single JSON file, fully loaded in memory.
-//
-// Writes go to a temporary file that is then renamed over the target, so a
-// crash mid-write can never leave a half-written roster behind.
 type JSONStore struct {
 	mu      sync.RWMutex
 	path    string
 	players []model.Player
 	// lastID is a high-water mark: an ID freed by a delete is never handed out
-	// again while the process runs, so a stale selection in a browser tab can
-	// never silently point at a different player.
+	// again while the process runs, so a stale browser tab can never silently
+	// point at a different player.
 	lastID int
 }
 
@@ -41,19 +34,14 @@ func NewJSONStore(path string) (*JSONStore, error) {
 }
 
 func (s *JSONStore) load() error {
-	data, err := os.ReadFile(s.path)
-	seeded := false
-	switch {
-	case errors.Is(err, os.ErrNotExist):
+	var players []model.Player
+	missing, err := readJSONFile(s.path, &players)
+	if err != nil {
+		return err
+	}
+	if missing {
 		s.players = DefaultPlayers()
-		seeded = true
-	case err != nil:
-		return fmt.Errorf("read %s: %w", s.path, err)
-	default:
-		var players []model.Player
-		if err := json.Unmarshal(data, &players); err != nil {
-			return fmt.Errorf("parse %s: %w (fix or delete the file to restore the example roster)", s.path, err)
-		}
+	} else {
 		if players == nil {
 			players = []model.Player{}
 		}
@@ -69,8 +57,7 @@ func (s *JSONStore) load() error {
 	if err := s.checkIDs(); err != nil {
 		return err
 	}
-
-	if seeded {
+	if missing {
 		return s.save() // write the example roster out so the file exists
 	}
 	return nil
@@ -96,48 +83,7 @@ func (s *JSONStore) checkIDs() error {
 	return nil
 }
 
-// save writes the roster atomically: a temp file in the same directory is
-// fsync'ed and then renamed over the target. The caller must hold the write lock.
-func (s *JSONStore) save() error {
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
-	}
-	data, err := json.MarshalIndent(s.players, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode players: %w", err)
-	}
-	tmp, err := os.CreateTemp(dir, ".players-*.json")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	name := tmp.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			tmp.Close()
-			os.Remove(name)
-		}
-	}()
-
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		return fmt.Errorf("write %s: %w", name, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		return fmt.Errorf("sync %s: %w", name, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close %s: %w", name, err)
-	}
-	if err := os.Chmod(name, 0o644); err != nil {
-		return fmt.Errorf("chmod %s: %w", name, err)
-	}
-	if err := os.Rename(name, s.path); err != nil {
-		return fmt.Errorf("replace %s: %w", s.path, err)
-	}
-	committed = true
-	return nil
-}
+func (s *JSONStore) save() error { return writeJSONFile(s.path, s.players) }
 
 // List returns a copy of the roster so callers cannot mutate stored state.
 func (s *JSONStore) List() ([]model.Player, error) {
@@ -148,6 +94,7 @@ func (s *JSONStore) List() ([]model.Player, error) {
 	return out, nil
 }
 
+// Get returns one player by ID.
 func (s *JSONStore) Get(id int) (model.Player, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

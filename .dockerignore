@@ -17,3 +17,6 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 README.md
+
+# Makefile build output
+bin

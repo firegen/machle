@@ -22,14 +22,17 @@ const maxBodyBytes = 1 << 20 // 1 MiB
 
 // Server exposes the REST API and the static frontend.
 type Server struct {
-	repo  storage.Repository
-	api   *http.ServeMux
-	index http.Handler
+	repo        storage.Repository
+	matches     storage.MatchRepository
+	matchRoutes bool
+	api         *http.ServeMux
+	index       http.Handler
 }
 
-// New builds a Server. static may be nil to skip the frontend routes.
-func New(repo storage.Repository, static http.FileSystem) *Server {
-	s := &Server{repo: repo, api: http.NewServeMux()}
+// New builds a Server. matches may be nil to leave the match endpoints off, and
+// static may be nil to skip the frontend routes.
+func New(repo storage.Repository, matches storage.MatchRepository, static http.FileSystem) *Server {
+	s := &Server{repo: repo, matches: matches, matchRoutes: matches != nil, api: http.NewServeMux()}
 	s.api.HandleFunc("GET /api/health", s.handleHealth)
 	s.api.HandleFunc("GET /api/config", s.handleConfig)
 	s.api.HandleFunc("GET /api/players", s.handleListPlayers)
@@ -37,6 +40,14 @@ func New(repo storage.Repository, static http.FileSystem) *Server {
 	s.api.HandleFunc("PUT /api/players/{id}", s.handleUpdatePlayer)
 	s.api.HandleFunc("DELETE /api/players/{id}", s.handleDeletePlayer)
 	s.api.HandleFunc("POST /api/balance", s.handleBalance)
+	if matches != nil {
+		s.api.HandleFunc("GET /api/matches", s.handleListMatches)
+		s.api.HandleFunc("POST /api/matches", s.handleCreateMatch)
+		s.api.HandleFunc("GET /api/matches/{id}", s.handleGetMatch)
+		s.api.HandleFunc("PUT /api/matches/{id}", s.handleUpdateMatch)
+		s.api.HandleFunc("DELETE /api/matches/{id}", s.handleDeleteMatch)
+		s.api.HandleFunc("GET /api/players/{id}/history", s.handlePlayerHistory)
+	}
 	// Subtree fallback for anything the routes above do not cover: it keeps every
 	// /api/ answer JSON and stops an API typo from reaching the frontend files.
 	s.api.HandleFunc("/api/", s.handleUnrouted)
@@ -47,28 +58,51 @@ func New(repo storage.Repository, static http.FileSystem) *Server {
 	return s
 }
 
-// apiMethods lists what each endpoint accepts, so a known path hit with the
-// wrong verb can be answered with 405 and an Allow header instead of a
-// misleading 404.
+// apiMethods lists what each static endpoint accepts, so a known path hit with
+// the wrong verb can be answered with 405 and an Allow header instead of a
+// misleading 404. Paths carrying an ID are covered by allowedMethods.
 var apiMethods = map[string][]string{
 	"/api/health":  {"GET"},
 	"/api/config":  {"GET"},
 	"/api/players": {"GET", "POST"},
 	"/api/balance": {"POST"},
+	"/api/matches": {"GET", "POST"},
+}
+
+// allowedMethods returns the verbs a known endpoint accepts, or nothing when the
+// path is not an endpoint at all.
+func (s *Server) allowedMethods(path string) []string {
+	if allowed, ok := apiMethods[path]; ok {
+		if path == "/api/matches" && !s.matchRoutes {
+			return nil
+		}
+		return allowed
+	}
+	if rest, ok := strings.CutPrefix(path, "/api/players/"); ok {
+		if isNumeric(rest) {
+			return []string{"PUT", "DELETE"}
+		}
+		if id, sub, split := strings.Cut(rest, "/"); split && sub == "history" && isNumeric(id) && s.matchRoutes {
+			return []string{"GET"}
+		}
+		return nil
+	}
+	if s.matchRoutes {
+		if rest, ok := strings.CutPrefix(path, "/api/matches/"); ok && isNumeric(rest) {
+			return []string{"GET", "PUT", "DELETE"}
+		}
+	}
+	return nil
+}
+
+func isNumeric(s string) bool {
+	n, err := strconv.Atoi(s)
+	return err == nil && n > 0
 }
 
 func (s *Server) handleUnrouted(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimRight(r.URL.Path, "/")
-	allowed, known := apiMethods[path]
-	if !known && strings.HasPrefix(path, "/api/players/") {
-		// /api/players/{id} is a real endpoint even though the ID is dynamic.
-		if id := strings.TrimPrefix(path, "/api/players/"); !strings.Contains(id, "/") {
-			if _, err := strconv.Atoi(id); err == nil {
-				allowed, known = []string{"PUT", "DELETE"}, true
-			}
-		}
-	}
-	if known {
+	if allowed := s.allowedMethods(path); len(allowed) > 0 {
 		w.Header().Set("Allow", strings.Join(allowed, ", "))
 		writeError(w, http.StatusMethodNotAllowed, fmt.Errorf("%s is not allowed on %s", r.Method, path))
 		return

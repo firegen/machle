@@ -24,14 +24,15 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address (host:port)")
 	data := flag.String("data", "data/players.json", "path to the JSON roster file")
+	history := flag.String("matches", "data/matches.json", "path to the JSON match history file")
 	flag.Parse()
 
-	if err := run(*addr, *data); err != nil {
+	if err := run(*addr, *data, *history); err != nil {
 		log.Fatalf("football-balancer: %v", err)
 	}
 }
 
-func run(addr, dataPath string) error {
+func run(addr, dataPath, historyPath string) error {
 	store, err := storage.NewJSONStore(dataPath)
 	if err != nil {
 		return err
@@ -42,6 +43,16 @@ func run(addr, dataPath string) error {
 	}
 	log.Printf("roster: %d players from %s", len(players), dataPath)
 
+	matchStore, err := storage.NewMatchJSONStore(historyPath)
+	if err != nil {
+		return err
+	}
+	saved, err := matchStore.List()
+	if err != nil {
+		return err
+	}
+	log.Printf("history: %d matches from %s", len(saved), historyPath)
+
 	assets, err := fs.Sub(web.Assets, ".")
 	if err != nil {
 		return fmt.Errorf("frontend assets: %w", err)
@@ -49,7 +60,7 @@ func run(addr, dataPath string) error {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           api.New(store, http.FS(assets)),
+		Handler:           api.New(store, matchStore, http.FS(assets)),
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
